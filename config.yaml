@@ -1,0 +1,107 @@
+# Configuration for AI Model Playground Hub
+server:
+  host: "0.0.0.0"
+  port: 8080
+  logger:
+    level: "info"
+
+mcps:
+  - id: text_generation_service
+    upstream_id: openai_backend
+    routes:
+      - id: "generate_text_route"
+        operation_id: "generateText"
+        uri: "/v1/chat/completions"
+        method: "POST"
+        meta:
+          name: "Generate Text with AI Model"
+          inputSchema: {
+            "type": "object",
+            "properties": {
+              "model": {"type": "string", "description": "Model ID to use"},
+              "messages": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "role": {"type": "string", "enum": ["system", "user", "assistant"]},
+                    "content": {"type": "string"}
+                  },
+                  "required": ["role", "content"]
+                }
+              },
+              "temperature": {"type": "number", "minimum": 0, "maximum": 2},
+              "max_tokens": {"type": "integer", "minimum": 1}
+            },
+            "required": ["model", "messages"]
+          }
+      
+      - id: "get_models_route"
+        operation_id: "listModels"
+        uri: "/v1/models"
+        method: "GET"
+        meta:
+          name: "List Available AI Models"
+  
+  - id: image_generation_service
+    upstream_id: openai_backend
+    routes:
+      - id: "generate_image_route"
+        operation_id: "generateImage"
+        uri: "/v1/images/generations"
+        method: "POST"
+        meta:
+          name: "Generate Image with AI"
+          inputSchema: {
+            "type": "object",
+            "properties": {
+              "prompt": {"type": "string", "description": "Image description"},
+              "n": {"type": "integer", "minimum": 1, "maximum": 10, "description": "Number of images"},
+              "size": {"type": "string", "enum": ["256x256", "512x512", "1024x1024"], "description": "Image size"},
+              "response_format": {"type": "string", "enum": ["url", "b64_json"], "description": "Response format"}
+            },
+            "required": ["prompt"]
+          }
+
+  - id: speech_to_text_service
+    upstream_id: whisper_backend
+    routes:
+      - id: "transcribe_audio_route"
+        operation_id: "transcribeAudio"
+        uri: "/v1/audio/transcriptions"
+        method: "POST"
+        meta:
+          name: "Transcribe Audio to Text"
+          inputSchema: {
+            "type": "object",
+            "properties": {
+              "file": {"type": "string", "description": "Base64 encoded audio file content"},
+              "model": {"type": "string", "description": "Model to use for transcription"},
+              "language": {"type": "string", "description": "Language code (optional)"},
+              "prompt": {"type": "string", "description": "Optional prompt for guidance"}
+            },
+            "required": ["file", "model"]
+          }
+
+upstreams:
+  - id: openai_backend
+    nodes:
+      "api.openai.com:443": 1
+    scheme: https
+    type: roundrobin
+    pass_host: rewrite
+    upstream_host: "api.openai.com"
+    headers:
+      Authorization: "Bearer ${OPENAI_API_KEY}"
+      Content-Type: "application/json"
+
+  - id: whisper_backend
+    nodes:
+      "api.openai.com:443": 1  # Whisper API is also part of OpenAI
+    scheme: https
+    type: roundrobin
+    pass_host: rewrite
+    upstream_host: "api.openai.com"
+    headers:
+      Authorization: "Bearer ${OPENAI_API_KEY}"
+      Content-Type: "application/json" 

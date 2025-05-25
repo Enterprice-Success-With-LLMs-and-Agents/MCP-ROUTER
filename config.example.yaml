@@ -1,0 +1,67 @@
+# Example config.yaml for MCP Access Point
+server:
+  host: "0.0.0.0"
+  port: 8080
+  logger:
+    level: "info" # trace, debug, info, warn, error, fatal
+
+mcps:
+  - id: petstore_service
+    upstream_id: petstore_backend
+    path: https://petstore.swagger.io/v2/swagger.json # Remote OpenAPI spec
+    # path: ./fixtures/openapi/petstore.json # Example for local file
+  
+  - id: weather_service
+    upstream_id: weather_api_backend
+    routes:
+      - id: "get_current_weather_route"
+        operation_id: "getCurrentWeather"
+        uri: "/data/2.5/weather" # Upstream URI template
+        method: "GET"
+        meta:
+          name: "Get Current Weather by City"
+          inputSchema: {
+            "type": "object",
+            "properties": {
+              "q": {"type": "string", "description": "City name"},
+              "appid": {"type": "string", "description": "API key"}
+            },
+            "required": ["q", "appid"]
+          }
+      - id: "get_forecast_route"
+        operation_id: "getWeatherForecast"
+        uri: "/data/2.5/forecast?lat={lat}&lon={lon}&appid={appid}"
+        method: "GET"
+        meta:
+          name: "Get 5 day weather forecast"
+          inputSchema: {
+            "type": "object",
+            "properties": {
+                "lat": {"type": "number"},
+                "lon": {"type": "number"},
+                "appid": {"type": "string"}
+            },
+            "required": ["lat", "lon", "appid"]
+          }
+
+upstreams:
+  - id: petstore_backend
+    nodes:
+      "petstore.swagger.io:443": 1 # Note: This is the host of the swagger.json, actual API might be different
+                                   # For a real service, point to actual API servers
+    scheme: https
+    type: roundrobin
+    pass_host: rewrite # 'pass' or 'rewrite'
+    upstream_host: "petstore.swagger.io" # Used if pass_host is 'rewrite'
+    headers:
+      X-Forwarded-For-Client: "mcp-gateway"
+
+  - id: weather_api_backend
+    nodes:
+      "api.openweathermap.org:443": 1
+    scheme: https
+    type: roundrobin
+    pass_host: rewrite
+    upstream_host: "api.openweathermap.org"
+    headers:
+      X-Custom-Weather-Header: "SetByGateway" 

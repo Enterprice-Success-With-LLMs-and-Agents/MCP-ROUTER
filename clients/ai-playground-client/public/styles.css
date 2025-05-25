@@ -1,0 +1,124 @@
+/* Additional styles for AI Model Playground */
+
+.playground-container {
+    animation: fadeIn 0.5s;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.btn-primary {
+    background-color: #4a6cf7;
+    border-color: #4a6cf7;
+    transition: all 0.3s ease;
+}
+
+.btn-primary:hover {
+    background-color: #3955d8;
+    border-color: #3955d8;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.response-container {
+    transition: all 0.3s ease;
+    border-left: 3px solid #4a6cf7;
+}
+
+.response-container:empty {
+    display: none;
+}
+
+.nav-tabs .nav-link {
+    transition: all 0.3s ease;
+    font-weight: 500;
+}
+
+.image-preview {
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.image-preview:hover {
+    transform: scale(1.02);
+}
+
+/* Custom scrollbar for response containers */
+.response-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.response-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+}
+
+.response-container::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 10px;
+}
+
+.response-container::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+/* Enhanced loader animation */
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+}
+
+.loader-spinner {
+    animation: pulse 1.5s infinite ease-in-out;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .playground-container {
+        padding: 15px;
+    }
+    
+    .nav-tabs .nav-link {
+        font-size: 0.9rem;
+        padding: 0.5rem 0.75rem;
+    }
+}
+
+/* Dark mode support for future implementation */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --future-dark-bg: #121212;
+        --future-dark-card: #1e1e1e;
+        --future-dark-text: #e0e0e0;
+    }
+}
+
+/* Notification system styling */
+.notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 15px 20px;
+    background-color: #4a6cf7;
+    color: white;
+    border-radius: 5px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    transform: translateX(120%);
+    transition: transform 0.3s ease;
+    z-index: 1000;
+}
+
+.notification.show {
+    transform: translateX(0);
+}
+
+.notification.error {
+    background-color: #dc3545;
+}
+
+.notification.success {
+    background-color: #28a745;
+} 
