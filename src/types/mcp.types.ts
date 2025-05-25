@@ -4,6 +4,7 @@ export interface McpOperation {
   upstreamUriTemplate: string;
   upstreamMethod: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'OPTIONS' | 'HEAD';
   inputSchema?: Record<string, any>; // JSON Schema for input validation
+  isStreaming?: boolean; // Indicates if the operation is expected to stream responses
   // Potentially more fields like parameter mappings, etc.
 }
 
@@ -19,6 +20,7 @@ export interface McpRequestContext {
 export interface ClientMcpRequest {
   operation_id: string;
   payload: Record<string, any>;
+  stream_options?: StreamOptions; // Added to allow client to specify streaming preferences
   // request_id, etc.
 }
 
@@ -32,4 +34,10 @@ export interface ClientMcpResponse {
     details?: any;
   };
   // stream_id, sequence_id, etc.
-} 
+}
+
+export interface StreamOptions {
+  correlation_id: string;
+  stream_to_sse: boolean;
+  // Potentially other options like preferred_event_name etc.
+}
