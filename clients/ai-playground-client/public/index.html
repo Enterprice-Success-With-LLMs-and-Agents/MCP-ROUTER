@@ -20,175 +20,288 @@
             box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
             padding: 20px;
         }
+        #debug-panel {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 200px;
+            background-color: #1e1e1e;
+            color: #fff;
+            overflow-y: auto;
+            z-index: 9999;
+            font-family: monospace;
+            padding: 10px;
+            border-top: 2px solid #007bff;
+            display: none;
+        }
+        #debug-panel.visible {
+            display: block;
+        }
+        #debug-panel .log {
+            margin: 2px 0;
+            padding: 3px 0;
+            border-bottom: 1px solid #333;
+        }
+        #debug-panel .log.error {
+            color: #ff5252;
+        }
+        #debug-panel .log.warn {
+            color: #ffb300;
+        }
+        #debug-panel .log.info {
+            color: #2196f3;
+        }
+        #debug-panel .log.debug {
+            color: #4caf50;
+        }
+        #debug-panel .log.network {
+            color: #e040fb;
+        }
+        #debug-toggle {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            z-index: 10000;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        #debug-toggle.active {
+            background-color: #dc3545;
+        }
         .tab-content {
             padding: 20px 0;
         }
-        .response-container {
-            background-color: #f8f9fa;
-            border-radius: 8px;
-            padding: 15px;
-            margin-top: 20px;
-            min-height: 100px;
-            max-height: 500px;
+        .chat-container {
+            height: 400px;
             overflow-y: auto;
-            white-space: pre-wrap;
-        }
-        .nav-tabs {
-            border-bottom: 2px solid #dee2e6;
-        }
-        .nav-tabs .nav-link {
-            margin-bottom: -2px;
-            border: none;
-            color: #6c757d;
-        }
-        .nav-tabs .nav-link.active {
-            color: #0d6efd;
-            border-bottom: 2px solid #0d6efd;
-        }
-        .image-preview {
-            max-width: 100%;
-            max-height: 300px;
-            margin-top: 10px;
+            border: 1px solid #e0e0e0;
             border-radius: 5px;
+            padding: 10px;
+            background-color: #f9f9f9;
         }
-        .loader {
-            display: none;
-            text-align: center;
-            margin: 10px 0;
+        .message {
+            margin-bottom: 15px;
+            display: flex;
+            flex-direction: column;
         }
-        .loader-spinner {
-            width: 2rem;
-            height: 2rem;
+        .message.user {
+            align-items: flex-end;
+        }
+        .message.assistant {
+            align-items: flex-start;
+        }
+        .message.system {
+            align-items: center;
+        }
+        .message-content {
+            padding: 10px 15px;
+            border-radius: 15px;
+            max-width: 80%;
+        }
+        .message.user .message-content {
+            background-color: #007bff;
+            color: white;
+            border-top-right-radius: 5px;
+        }
+        .message.assistant .message-content {
+            background-color: #e9ecef;
+            color: #212529;
+            border-top-left-radius: 5px;
+        }
+        .message.system .message-content {
+            background-color: #ffc107;
+            color: #212529;
+            font-style: italic;
+        }
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .typing-indicator span {
+            height: 8px;
+            width: 8px;
+            margin: 0 2px;
+            background-color: #999;
+            border-radius: 50%;
+            display: inline-block;
+            animation: typing 1.4s infinite ease-in-out both;
+        }
+        .typing-indicator span:nth-child(1) {
+            animation-delay: 0s;
+        }
+        .typing-indicator span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        .typing-indicator span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+        @keyframes typing {
+            0% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.5);
+            }
+            100% {
+                transform: scale(1);
+            }
+        }
+        .image-result img {
+            max-width: 100%;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+        .transcription-result {
+            min-height: 100px;
+        }
+        pre {
+            white-space: pre-wrap;
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #e9ecef;
+        }
+        code {
+            color: #d63384;
         }
     </style>
 </head>
 <body>
+    <!-- Debug Panel -->
+    <button id="debug-toggle" title="Toggle Debug Panel">🐞</button>
+    <div id="debug-panel">
+        <div id="debug-logs"></div>
+    </div>
+    
     <div class="container">
-        <header class="text-center my-4">
-            <h1 class="display-4">AI Model Playground</h1>
-            <p class="lead">Explore different AI capabilities through a simple interface</p>
-        </header>
-
-        <div class="row mb-4">
-            <div class="col-md-3">
-                <div class="nav flex-column nav-pills" id="v-pills-tab" role="tablist">
-                    <button class="nav-link active" id="text-tab" data-bs-toggle="pill" data-bs-target="#text-panel" type="button">
-                        <i class="bi bi-chat-dots"></i> Text Generation
-                    </button>
-                    <button class="nav-link" id="image-tab" data-bs-toggle="pill" data-bs-target="#image-panel" type="button">
-                        <i class="bi bi-image"></i> Image Generation
-                    </button>
-                    <button class="nav-link" id="audio-tab" data-bs-toggle="pill" data-bs-target="#audio-panel" type="button">
-                        <i class="bi bi-mic"></i> Audio Transcription
-                    </button>
-                </div>
-            </div>
-            <div class="col-md-9">
-                <div class="tab-content" id="v-pills-tabContent">
-                    <!-- Text Generation Panel -->
-                    <div class="tab-pane fade show active" id="text-panel">
-                        <div class="card">
-                            <div class="card-header">
-                                <h5>Text Generation</h5>
+        <div class="playground-container">
+            <h1 class="text-center mb-4">AI Model Playground Hub</h1>
+            
+            <ul class="nav nav-tabs" id="modelTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="text-tab" data-bs-toggle="tab" data-bs-target="#text-panel" type="button" role="tab">Text</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="image-tab" data-bs-toggle="tab" data-bs-target="#image-panel" type="button" role="tab">Image</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="audio-tab" data-bs-toggle="tab" data-bs-target="#audio-panel" type="button" role="tab">Audio</button>
+                </li>
+            </ul>
+            
+            <div class="tab-content" id="modelTabsContent">
+                <!-- Text Generation Panel -->
+                <div class="tab-pane fade show active" id="text-panel">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>Text Generation</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label for="text-model" class="form-label">Model</label>
+                                <select class="form-select" id="text-model">
+                                    <option value="gpt-4.1-mini">GPT-4.1 Mini</option>
+                                    <option value="gpt-4o">GPT-4o</option>
+                                    <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                                </select>
                             </div>
-                            <div class="card-body">
-                                <div class="mb-3">
-                                    <label for="text-model" class="form-label">Model</label>
-                                    <select class="form-select" id="text-model">
-                                        <option value="gpt-4.1-mini">GPT-4.1 Mini</option>
-                                        <option value="gpt-4o">GPT-4o</option>
-                                        <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-                                    </select>
-                                </div>
-                                <div class="chat-container mb-3" id="chat-container">
-                                    <div class="messages" id="messages">
-                                        <div class="message system">
-                                            <div class="message-content">
-                                                <p>Hello! I'm an AI assistant. How can I help you today?</p>
-                                            </div>
+                            <div class="chat-container mb-3" id="chat-container">
+                                <div class="messages" id="messages">
+                                    <div class="message system">
+                                        <div class="message-content">
+                                            <p>Hello! I'm an AI assistant. How can I help you today?</p>
                                         </div>
                                     </div>
                                 </div>
-                                <div class="input-group">
-                                    <textarea class="form-control" id="text-prompt" rows="2" placeholder="Type your message here..."></textarea>
-                                    <button class="btn btn-primary" type="button" id="send-text-btn">
-                                        <i class="bi bi-send"></i> Send
-                                    </button>
-                                </div>
-                                <div class="form-check mt-2">
-                                    <input class="form-check-input" type="checkbox" id="stream-response" checked>
-                                    <label class="form-check-label" for="stream-response">
-                                        Stream response
-                                    </label>
-                                </div>
+                            </div>
+                            <div class="input-group">
+                                <textarea class="form-control" id="text-prompt" rows="2" placeholder="Type your message here..."></textarea>
+                                <button class="btn btn-primary" type="button" id="send-text-btn">
+                                    <i class="bi bi-send"></i> Send
+                                </button>
+                            </div>
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" id="stream-response" checked>
+                                <label class="form-check-label" for="stream-response">
+                                    Stream response
+                                </label>
                             </div>
                         </div>
                     </div>
+                </div>
 
-                    <!-- Image Generation Panel -->
-                    <div class="tab-pane fade" id="image-panel">
-                        <div class="card">
-                            <div class="card-header">
-                                <h5>Image Generation</h5>
+                <!-- Image Generation Panel -->
+                <div class="tab-pane fade" id="image-panel">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>Image Generation</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label for="image-model" class="form-label">Model</label>
+                                <select class="form-select" id="image-model">
+                                    <option value="dall-e-3">DALL-E 3</option>
+                                    <option value="dall-e-2">DALL-E 2</option>
+                                </select>
                             </div>
-                            <div class="card-body">
-                                <div class="mb-3">
-                                    <label for="image-model" class="form-label">Model</label>
-                                    <select class="form-select" id="image-model">
-                                        <option value="dall-e-3">DALL-E 3</option>
-                                        <option value="dall-e-2">DALL-E 2</option>
-                                    </select>
-                                </div>
-                                <div class="mb-3">
-                                    <label for="image-size" class="form-label">Image Size</label>
-                                    <select class="form-select" id="image-size">
-                                        <option value="1024x1024">1024x1024</option>
-                                        <option value="512x512">512x512</option>
-                                        <option value="256x256">256x256</option>
-                                    </select>
-                                </div>
-                                <div class="mb-3">
-                                    <label for="image-prompt" class="form-label">Prompt</label>
-                                    <textarea class="form-control" id="image-prompt" rows="3" placeholder="Describe the image you want to generate..."></textarea>
-                                </div>
-                                <button class="btn btn-primary" type="button" id="generate-image-btn">
-                                    <i class="bi bi-image"></i> Generate Image
-                                </button>
-                                <div class="mt-4" id="image-result">
-                                    <!-- Generated images will appear here -->
-                                </div>
+                            <div class="mb-3">
+                                <label for="image-size" class="form-label">Size</label>
+                                <select class="form-select" id="image-size">
+                                    <option value="1024x1024">1024x1024</option>
+                                    <option value="1792x1024">1792x1024</option>
+                                    <option value="1024x1792">1024x1792</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label for="image-prompt" class="form-label">Prompt</label>
+                                <textarea class="form-control" id="image-prompt" rows="3" placeholder="Describe the image you want to generate..."></textarea>
+                            </div>
+                            <button class="btn btn-primary" type="button" id="generate-image-btn">
+                                <i class="bi bi-image"></i> Generate Image
+                            </button>
+                            <div class="mt-4" id="image-result">
+                                <!-- Generated images will appear here -->
                             </div>
                         </div>
                     </div>
+                </div>
 
-                    <!-- Audio Transcription Panel -->
-                    <div class="tab-pane fade" id="audio-panel">
-                        <div class="card">
-                            <div class="card-header">
-                                <h5>Audio Transcription</h5>
+                <!-- Audio Transcription Panel -->
+                <div class="tab-pane fade" id="audio-panel">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>Audio Transcription</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label for="audio-model" class="form-label">Model</label>
+                                <select class="form-select" id="audio-model">
+                                    <option value="whisper-1">Whisper</option>
+                                </select>
                             </div>
-                            <div class="card-body">
-                                <div class="mb-3">
-                                    <label for="audio-model" class="form-label">Model</label>
-                                    <select class="form-select" id="audio-model">
-                                        <option value="whisper-1">Whisper</option>
-                                    </select>
-                                </div>
-                                <div class="mb-3">
-                                    <label for="audio-file" class="form-label">Upload Audio File</label>
-                                    <input class="form-control" type="file" id="audio-file" accept="audio/*">
-                                    <div class="form-text">Supported formats: mp3, mp4, mpeg, mpga, m4a, wav, webm</div>
-                                </div>
-                                <button class="btn btn-primary" type="button" id="transcribe-btn" disabled>
-                                    <i class="bi bi-file-earmark-text"></i> Transcribe Audio
-                                </button>
-                                <div class="mt-4">
-                                    <label for="transcription-result" class="form-label">Transcription Result</label>
-                                    <div class="card">
-                                        <div class="card-body">
-                                            <div id="transcription-result" class="transcription-result">
-                                                <p class="text-muted">Transcription will appear here...</p>
-                                            </div>
+                            <div class="mb-3">
+                                <label for="audio-file" class="form-label">Upload Audio File</label>
+                                <input class="form-control" type="file" id="audio-file" accept="audio/*">
+                                <div class="form-text">Supported formats: mp3, mp4, mpeg, mpga, m4a, wav, webm</div>
+                            </div>
+                            <button class="btn btn-primary" type="button" id="transcribe-btn" disabled>
+                                <i class="bi bi-file-earmark-text"></i> Transcribe Audio
+                            </button>
+                            <div class="mt-4">
+                                <label for="transcription-result" class="form-label">Transcription Result</label>
+                                <div class="card">
+                                    <div class="card-body">
+                                        <div id="transcription-result" class="transcription-result">
+                                            <p class="text-muted">Transcription will appear here...</p>
                                         </div>
                                     </div>
                                 </div>
@@ -202,7 +315,108 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', () => {
+        // Debug Panel Setup
+        const debugPanel = document.getElementById('debug-panel');
+        const debugLogs = document.getElementById('debug-logs');
+        const debugToggle = document.getElementById('debug-toggle');
+        
+        // Toggle debug panel visibility
+        debugToggle.addEventListener('click', () => {
+            debugPanel.classList.toggle('visible');
+            debugToggle.classList.toggle('active');
+        });
+        
+        // Override console methods to capture logs
+        const originalConsole = {
+            log: console.log,
+            error: console.error,
+            warn: console.warn,
+            info: console.info,
+            debug: console.debug
+        };
+        
+        // Function to add log to debug panel
+        function addLogToPanel(type, args) {
+            const logElement = document.createElement('div');
+            logElement.className = `log ${type}`;
+            
+            // Format timestamp
+            const now = new Date();
+            const timestamp = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}.${now.getMilliseconds().toString().padStart(3, '0')}`;
+            
+            // Format arguments
+            let formattedArgs = [];
+            for (const arg of args) {
+                if (typeof arg === 'object') {
+                    try {
+                        formattedArgs.push(JSON.stringify(arg, null, 2));
+                    } catch (e) {
+                        formattedArgs.push(String(arg));
+                    }
+                } else {
+                    formattedArgs.push(String(arg));
+                }
+            }
+            
+            logElement.innerHTML = `<span class="timestamp">[${timestamp}]</span> <span class="type">[${type.toUpperCase()}]</span> ${formattedArgs.join(' ')}`;
+            debugLogs.appendChild(logElement);
+            debugLogs.scrollTop = debugLogs.scrollHeight;
+            
+            // Auto-show debug panel on errors
+            if (type === 'error') {
+                debugPanel.classList.add('visible');
+                debugToggle.classList.add('active');
+            }
+        }
+        
+        // Override console methods
+        console.log = function() {
+            addLogToPanel('log', arguments);
+            originalConsole.log.apply(console, arguments);
+        };
+        
+        console.error = function() {
+            addLogToPanel('error', arguments);
+            originalConsole.error.apply(console, arguments);
+        };
+        
+        console.warn = function() {
+            addLogToPanel('warn', arguments);
+            originalConsole.warn.apply(console, arguments);
+        };
+        
+        console.info = function() {
+            addLogToPanel('info', arguments);
+            originalConsole.info.apply(console, arguments);
+        };
+        
+        console.debug = function() {
+            addLogToPanel('debug', arguments);
+            originalConsole.debug.apply(console, arguments);
+        };
+        
+        // Monitor fetch requests
+        const originalFetch = window.fetch;
+        window.fetch = function() {
+            const url = arguments[0];
+            const options = arguments[1] || {};
+            
+            addLogToPanel('network', [`Fetch Request: ${options.method || 'GET'} ${url}`, options]);
+            
+            return originalFetch.apply(this, arguments)
+                .then(response => {
+                    addLogToPanel('network', [`Fetch Response: ${response.status} ${response.statusText} for ${options.method || 'GET'} ${url}`]);
+                    return response;
+                })
+                .catch(error => {
+                    addLogToPanel('error', [`Fetch Error: ${error.message} for ${options.method || 'GET'} ${url}`]);
+                    throw error;
+                });
+        };
+        
+        // Log initial debug message
+        console.info('Debug panel initialized. Click the bug icon to toggle visibility.');
+        document.addEventListener('DOMContentLoaded', function() {
             // Elements
             const chatContainer = document.getElementById('chat-container');
             const messagesContainer = document.getElementById('messages');
@@ -223,12 +437,54 @@
             const transcriptionResultContainer = document.getElementById('transcription-result');
             
             // Enable/disable transcribe button based on file selection
-            audioFileInput.addEventListener('change', () => {
+            audioFileInput.addEventListener('change', function() {
                 transcribeBtn.disabled = !audioFileInput.files.length;
             });
             
-            // Text generation
-            sendTextBtn.addEventListener('click', async () => {
+            // Helper function to add a message to the chat
+            function addMessage(role, content) {
+                const messageId = 'msg-' + Date.now();
+                const messageElem = document.createElement('div');
+                messageElem.className = `message ${role}`;
+                messageElem.id = messageId;
+                messageElem.innerHTML = `
+                    <div class="message-content">
+                        ${content}
+                    </div>
+                `;
+                messagesContainer.appendChild(messageElem);
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+                return messageId;
+            }
+            
+            // Helper function to update a message
+            function updateMessage(messageId, content) {
+                const messageElem = document.getElementById(messageId);
+                if (messageElem) {
+                    messageElem.querySelector('.message-content').innerHTML = content;
+                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                }
+            }
+            
+            // Helper function to get chat history
+            function getChatHistory() {
+                const messages = [];
+                const messageElems = messagesContainer.querySelectorAll('.message');
+                
+                messageElems.forEach(elem => {
+                    if (elem.classList.contains('system')) return;
+                    
+                    const role = elem.classList.contains('user') ? 'user' : 'assistant';
+                    const content = elem.querySelector('.message-content').textContent.trim();
+                    
+                    messages.push({ role, content });
+                });
+                
+                return messages;
+            }
+            
+            // Text generation function
+            async function sendMessage() {
                 const prompt = textPromptInput.value.trim();
                 if (!prompt) return;
                 
@@ -244,13 +500,13 @@
                 try {
                     // Get selected model
                     const model = textModelSelect.value;
-                    const shouldStream = streamCheckbox.checked;
+                    const streamEnabled = streamCheckbox.checked;
                     
                     // Get chat history
                     const messages = getChatHistory();
                     
-                    if (shouldStream) {
-                        // Stream response
+                    if (streamEnabled) {
+                        // Set up streaming
                         const response = await fetch('/api/text', {
                             method: 'POST',
                             headers: {
@@ -265,54 +521,77 @@
                         
                         // Create a new message element
                         const messageElem = document.getElementById(assistantMsgId);
-                        const contentElem = messageElem.querySelector('.message-content');
-                        contentElem.innerHTML = '<p></p>';
-                        const responseParagraph = contentElem.querySelector('p');
                         
-                        // Set up event source
-                        const reader = response.body.getReader();
-                        const decoder = new TextDecoder();
-                        let buffer = '';
-                        
-                        while (true) {
-                            const { done, value } = await reader.read();
+                        // Handle streaming response
+                        if (response.status === 200) {
+                            const reader = response.body.getReader();
+                            const decoder = new TextDecoder();
+                            let content = '';
                             
-                            if (done) {
-                                break;
-                            }
-                            
-                            // Decode the chunk and add to buffer
-                            buffer += decoder.decode(value, { stream: true });
-                            
-                            // Process complete events
-                            const lines = buffer.split('\n\n');
-                            buffer = lines.pop() || '';
-                            
-                            for (const line of lines) {
-                                if (line.startsWith('data: ')) {
-                                    try {
-                                        const data = JSON.parse(line.substring(6));
-                                        
-                                        if (data.error) {
-                                            throw new Error(data.error);
+                            while (true) {
+                                const { value, done } = await reader.read();
+                                if (done) break;
+                                
+                                const chunk = decoder.decode(value, { stream: true });
+                                const lines = chunk.split('\n');
+                                
+                                for (const line of lines) {
+                                    if (!line.trim() || line.trim() === 'data: [DONE]') continue;
+                                    
+                                    if (line.startsWith('data: ')) {
+                                        try {
+                                            const data = line.substring(6);
+                                            if (!data || data === '{}') continue;
+                                            
+                                            const parsed = JSON.parse(data);
+                                            
+                                            // Log the parsed data for debugging
+                                            console.info('Parsed SSE data:', parsed);
+                                            
+                                            // Check for different response formats
+                                            if (parsed.content) {
+                                                // Direct content from our server
+                                                console.log('Found content property:', parsed.content);
+                                                content += parsed.content;
+                                                updateMessage(assistantMsgId, content);
+                                            } else if (parsed.error) {
+                                                // Error message
+                                                console.error('Error in SSE response:', parsed.error);
+                                                updateMessage(assistantMsgId, `Error: ${parsed.error}`);
+                                            } else if (parsed.choices && parsed.choices[0]) {
+                                                // OpenAI-style format
+                                                console.log('Found choices array:', parsed.choices[0]);
+                                                if (parsed.choices[0].delta && parsed.choices[0].delta.content) {
+                                                    console.log('Found delta content:', parsed.choices[0].delta.content);
+                                                    content += parsed.choices[0].delta.content;
+                                                    updateMessage(assistantMsgId, content);
+                                                } else if (parsed.choices[0].message && parsed.choices[0].message.content) {
+                                                    console.log('Found message content:', parsed.choices[0].message.content);
+                                                    content += parsed.choices[0].message.content;
+                                                    updateMessage(assistantMsgId, content);
+                                                } else {
+                                                    console.warn('No content found in choices object:', parsed.choices[0]);
+                                                }
+                                            } else {
+                                                // Unknown format, log it for debugging
+                                                console.warn('Unknown SSE data format:', parsed);
+                                            }
+                                        } catch (parseError) {
+                                            console.error('Error parsing SSE data:', parseError, 'Raw data:', line);
                                         }
-                                        
-                                        if (data.content) {
-                                            responseParagraph.textContent += data.content;
-                                            chatContainer.scrollTop = chatContainer.scrollHeight;
-                                        }
-                                        
-                                        if (data.done) {
-                                            break;
-                                        }
-                                    } catch (e) {
-                                        console.error('Error parsing SSE data:', e);
                                     }
                                 }
                             }
+                            
+                            if (!content) {
+                                updateMessage(assistantMsgId, 'No response received from the model.');
+                            }
+                        } else {
+                            const errorData = await response.json();
+                            updateMessage(assistantMsgId, `Error: ${errorData.error || 'Unknown error'}`);
                         }
                     } else {
-                        // Get complete response
+                        // Get complete response without streaming
                         const response = await fetch('/api/text', {
                             method: 'POST',
                             headers: {
@@ -341,23 +620,28 @@
                 
                 // Scroll to bottom
                 chatContainer.scrollTop = chatContainer.scrollHeight;
+            }
+            
+            // Add event listener to the send button
+            sendTextBtn.addEventListener('click', function() {
+                sendMessage();
             });
             
             // Handle Enter key in text prompt
-            textPromptInput.addEventListener('keydown', (e) => {
+            textPromptInput.addEventListener('keydown', function(e) {
                 if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
-                    sendTextBtn.click();
+                    sendMessage();
                 }
             });
             
             // Image generation
-            generateImageBtn.addEventListener('click', async () => {
+            generateImageBtn.addEventListener('click', async function() {
                 const prompt = imagePromptInput.value.trim();
                 if (!prompt) return;
                 
                 // Show loading
-                imageResultContainer.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Generating image...</p></div>';
+                imageResultContainer.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Generating image...</p></div>';
                 
                 try {
                     // Get selected model and size
@@ -384,16 +668,8 @@
                     }
                     
                     // Display image
-                    const imageUrl = result.data.data[0].url;
-                    imageResultContainer.innerHTML = `
-                        <div class="card">
-                            <img src="${imageUrl}" class="card-img-top generated-image" alt="Generated image">
-                            <div class="card-body">
-                                <p class="card-text"><small class="text-muted">Prompt: ${prompt}</small></p>
-                                <a href="${imageUrl}" class="btn btn-sm btn-outline-primary" target="_blank">Open in new tab</a>
-                            </div>
-                        </div>
-                    `;
+                    const imageUrl = result.data.url;
+                    imageResultContainer.innerHTML = `<img src="${imageUrl}" alt="${prompt}" class="img-fluid">`;
                 } catch (error) {
                     console.error('Error:', error);
                     imageResultContainer.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
@@ -401,16 +677,16 @@
             });
             
             // Audio transcription
-            transcribeBtn.addEventListener('click', async () => {
-                const file = audioFileInput.files[0];
-                if (!file) return;
+            transcribeBtn.addEventListener('click', async function() {
+                if (!audioFileInput.files.length) return;
                 
                 // Show loading
-                transcriptionResultContainer.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Transcribing audio...</p></div>';
+                transcriptionResultContainer.innerHTML = '<div class="text-center"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div><p class="mt-2">Transcribing audio...</p></div>';
                 
                 try {
-                    // Get selected model
+                    // Get selected model and file
                     const model = audioModelSelect.value;
+                    const file = audioFileInput.files[0];
                     
                     // Create form data
                     const formData = new FormData();
@@ -418,7 +694,7 @@
                     formData.append('model', model);
                     
                     // Send request
-                    const response = await fetch('/api/transcribe', {
+                    const response = await fetch('/api/audio/transcriptions', {
                         method: 'POST',
                         body: formData
                     });
@@ -430,60 +706,14 @@
                     }
                     
                     // Display transcription
-                    transcriptionResultContainer.innerHTML = `<p>${result.data.text}</p>`;
+                    const transcription = result.data.text;
+                    transcriptionResultContainer.innerHTML = `<p>${transcription}</p>`;
                 } catch (error) {
                     console.error('Error:', error);
                     transcriptionResultContainer.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
                 }
             });
-            
-            // Helper functions
-            function addMessage(role, content) {
-                const messageId = `msg-${Date.now()}`;
-                const messageDiv = document.createElement('div');
-                messageDiv.className = `message ${role}`;
-                messageDiv.id = messageId;
-                messageDiv.innerHTML = `
-                    <div class="message-content">
-                        <p>${content}</p>
-                    </div>
-                `;
-                messagesContainer.appendChild(messageDiv);
-                chatContainer.scrollTop = chatContainer.scrollHeight;
-                return messageId;
-            }
-            
-            function updateMessage(messageId, content) {
-                const messageElem = document.getElementById(messageId);
-                if (messageElem) {
-                    const contentElem = messageElem.querySelector('.message-content');
-                    contentElem.innerHTML = `<p>${content}</p>`;
-                }
-            }
-            
-            function getChatHistory() {
-                const messages = [];
-                const messageElems = messagesContainer.querySelectorAll('.message');
-                
-                messageElems.forEach(elem => {
-                    if (elem.classList.contains('system') || elem.classList.contains('user') || elem.classList.contains('assistant')) {
-                        const role = elem.classList.contains('system') ? 'system' : 
-                                    elem.classList.contains('user') ? 'user' : 'assistant';
-                        
-                        const contentElem = elem.querySelector('.message-content p');
-                        if (contentElem) {
-                            const content = contentElem.textContent;
-                            // Skip messages with typing indicators
-                            if (!content.includes('typing-indicator')) {
-                                messages.push({ role, content });
-                            }
-                        }
-                    }
-                });
-                
-                return messages;
-            }
         });
     </script>
 </body>
-</html> 
+</html>
