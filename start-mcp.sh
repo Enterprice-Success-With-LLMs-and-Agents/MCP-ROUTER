@@ -7,6 +7,13 @@ echo "Starting MCP Access Point..."
 export NODE_ENV=development
 export CONFIG_FILE=config.ai-playground.yaml
 
+# Load environment variables (including OPENAI_API_KEY) from .env
+if [ -f .env ]; then
+  set -a
+  source .env
+  set +a
+fi
+
 # Create logs directory if it doesn't exist
 mkdir -p logs
 
