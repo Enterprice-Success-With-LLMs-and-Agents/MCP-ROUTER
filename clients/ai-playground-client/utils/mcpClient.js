@@ -1,11 +1,10 @@
 const axios = require('axios');
-const FormData = require('form-data');
 const logger = require('./logger');
 const { randomUUID } = require('crypto'); // Import randomUUID
 
 class McpClient {
     constructor(config) {
-        this.apiGatewayUrl = config.apiGatewayUrl || 'http://localhost:8080';
+        this.apiGatewayUrl = config.apiGatewayUrl || 'http://127.0.0.1:8080';
         this.apiKey = config.apiKey;
         
         this.httpClient = axios.create({
@@ -20,39 +19,95 @@ class McpClient {
         logger.info(`McpClient initialized with API Gateway URL: ${this.apiGatewayUrl}`);
     }
     
+    /**
+     * Returns authorization headers if an API key is available
+     */
+    getAuthHeaders() {
+        return this.apiKey ? { 'Authorization': `Bearer ${this.apiKey}` } : {};
+    }
+    
     async sendRequest({ serviceId, endpoint, method = 'POST', body = {}, headers = {} }) {
         try {
+            // Generate a request ID for tracking
+            const requestId = `req-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
+            
             logger.info({
+                requestId,
                 event: 'request_start',
                 serviceId,
                 endpoint,
-                method
-            }, `Sending request to ${serviceId}/${endpoint}`);
+                method,
+                body: JSON.stringify(body).substring(0, 200) // Log part of the body for debugging
+            }, `[${requestId}] Sending request to ${serviceId}/${endpoint}`);
+            
+            // Construct the request payload according to MCP protocol
+            const requestPayload = {
+                operation_id: endpoint.replace(/^\//, ''), // e.g., "generateText" or "v1/chat/completions"
+                payload: body
+            };
+            
+            logger.info({
+                requestId,
+                requestPayload
+            }, `[${requestId}] Full request payload: ${JSON.stringify(requestPayload)}`);
             
             const response = await this.httpClient.request({
                 method,
                 url: `/api/${serviceId}/mcp`, // Standard MCP endpoint
-                data: { // This is the ClientMcpRequest structure
-                    operation_id: endpoint.replace(/^\//, ''), // e.g., "generateText" or "v1/chat/completions"
-                    payload: body 
-                },
+                data: requestPayload,
                 headers: {
                     ...headers
                 },
                 timeout: 120000
             });
             
+            // Log the full response for debugging
             logger.info({
+                requestId,
                 event: 'request_complete',
                 serviceId,
                 endpoint,
                 method,
-                statusCode: response.status
-            }, `Request to ${serviceId}/${endpoint} completed with status ${response.status}`);
+                statusCode: response.status,
+                responseHeaders: response.headers,
+                responseData: typeof response.data === 'object' ? JSON.stringify(response.data).substring(0, 500) : response.data
+            }, `[${requestId}] Request to ${serviceId}/${endpoint} completed with status ${response.status}`);
             
-            // Assuming server response includes { success: true, data: ... } or { success: false, error: ... }
-            // And actual upstream data is in response.data.data
-            return response.data.data || response.data; 
+            // Check if we have a valid response
+            if (!response.data) {
+                logger.warn({ requestId }, `[${requestId}] Empty response received from server`);
+                return { error: 'Empty response from server' };
+            }
+            
+            // Try to extract the data from the response based on different possible formats
+            let result;
+            if (response.data.data) {
+                // Format: { success: true, data: {...} }
+                logger.info({ requestId }, `[${requestId}] Found data in response.data.data`);
+                result = response.data.data;
+            } else if (response.data.success === true) {
+                // Format: { success: true, content: "..." }
+                logger.info({ requestId }, `[${requestId}] Found success flag in response`);
+                result = response.data;
+            } else if (response.data.choices) {
+                // Format: { choices: [{...}] }
+                logger.info({ requestId }, `[${requestId}] Found choices array in response`);
+                result = response.data;
+            } else {
+                // Just return the whole response
+                logger.info({ requestId }, `[${requestId}] Using entire response.data`);
+                result = response.data;
+            }
+            
+            // Add a default response if result is empty
+            if (!result || (typeof result === 'object' && Object.keys(result).length === 0)) {
+                logger.warn({ requestId }, `[${requestId}] Extracted result is empty, creating default response`);
+                result = {
+                    content: "I'm sorry, I received an empty response from the server. Please try again."
+                };
+            }
+            
+            return result;
         } catch (error) {
             // Standard error handling (as before)
             if (error.response) {
@@ -72,9 +127,10 @@ class McpClient {
      * Stream a request to the MCP Access Point using SSE.
      */
     async streamRequest({ serviceId, endpoint, method = 'POST', body = {}, headers = {}, onData, onError, onComplete }) {
-        const clientCorrelationId = randomUUID(); // Generate unique ID for this streaming session
+        // Generate a unique correlation ID for this request
+        const clientCorrelationId = `client-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
+        
         logger.info({
-            event: 'stream_request_start',
             serviceId,
             endpoint,
             method,
@@ -82,88 +138,72 @@ class McpClient {
         }, `Starting streaming request to ${serviceId}/${endpoint} with correlationId ${clientCorrelationId}`);
 
         try {
-            // 1. Establish SSE connection, passing the correlationId
-            const eventSourceUrl = `${this.apiGatewayUrl}/api/${serviceId}/sse?correlationId=${clientCorrelationId}`;
-            const eventSource = new EventSource(eventSourceUrl);
+            // 1. First, initiate the operation by sending a POST request
+            logger.info(`[${clientCorrelationId}] Initiating streaming operation with POST request`);
             
-            let streamEnded = false; // Flag to prevent multiple onComplete calls
-
-            // Helper to safely close EventSource and call onComplete
+            // Send the initial request to start the operation
+            const initResponse = await this.sendSseInitiationRequest(serviceId, endpoint.replace(/^\//,''), body, clientCorrelationId);
+            logger.info(`[${clientCorrelationId}] SSE initiation request successful:`, initResponse);
+            
+            // 2. Now poll for updates using the correlation ID
+            let streamEnded = false;
+            let pollInterval;
+            
+            // Helper to safely stop polling and call onComplete
             const cleanupAndComplete = () => {
                 if (!streamEnded) {
                     streamEnded = true;
-                    if (eventSource.readyState !== EventSource.CLOSED) {
-                        eventSource.close();
+                    if (pollInterval) {
+                        clearInterval(pollInterval);
+                        pollInterval = null;
                     }
-                    logger.info(`[${clientCorrelationId}] SSE stream cleanup and onComplete called.`);
+                    logger.info(`[${clientCorrelationId}] Polling stopped and onComplete called.`);
                     if (onComplete) onComplete();
                 }
             };
-
-            eventSource.onopen = () => {
-                logger.info(`[${clientCorrelationId}] SSE connection opened to ${eventSourceUrl}`);
-                // 2. After SSE connection is open, send the initial POST request to trigger the operation
-                this.sendSseInitiationRequest(serviceId, endpoint.replace(/^\//, ''), body, clientCorrelationId)
-                    .then(initResponse => {
-                        logger.info(`[${clientCorrelationId}] SSE initiation request successful:`, initResponse);
-                        // The POST request was accepted, now wait for data over SSE.
-                    })
-                    .catch(initError => {
-                        logger.error(`[${clientCorrelationId}] SSE initiation request failed:`, initError);
-                        if (onError) onError(initError);
-                        cleanupAndComplete(); // Close SSE if initiation fails
-                    });
-            };
             
-            eventSource.addEventListener('mcp_connected', (event) => {
-                // Server confirms SSE channel is registered with this correlationId
-                const data = JSON.parse(event.data);
-                logger.info(`[${clientCorrelationId}] MCP Connected event received:`, data);
-            });
-
-            eventSource.addEventListener('mcp_response', (event) => {
+            // Set up polling mechanism to check for updates
+            const pollForUpdates = async () => {
                 try {
-                    const data = JSON.parse(event.data);
-                    // Assuming data now comes as { content: actual_chunk }
-                    if (data && data.content) {
-                        onData(data.content); 
-                    } else if (data) { // Fallback if structure is different
-                        onData(data);
+                    const pollUrl = `${this.apiGatewayUrl}/api/${serviceId}/poll?correlationId=${clientCorrelationId}`;
+                    const headers = {
+                        'Accept': 'application/json',
+                        'Cache-Control': 'no-cache'
+                    };
+                    
+                    // Add authorization if available
+                    if (this.apiKey) {
+                        headers['Authorization'] = `Bearer ${this.apiKey}`;
+                    }
+                    
+                    const response = await axios.get(pollUrl, { headers });
+                    
+                    if (response.status === 200 && response.data) {
+                        // Process the data
+                        if (response.data.event === 'mcp_response' && response.data.data) {
+                            if (onData) onData(response.data.data);
+                        } else if (response.data.event === 'mcp_stream_end') {
+                            logger.info(`[${clientCorrelationId}] Received stream end event`);
+                            cleanupAndComplete();
+                        } else if (response.data.event === 'mcp_error') {
+                            logger.error(`[${clientCorrelationId}] Received error event:`, response.data);
+                            if (onError) onError(new Error(response.data.data?.message || 'Unknown error from server'));
+                            cleanupAndComplete();
+                        }
                     }
                 } catch (error) {
-                    logger.error(`[${clientCorrelationId}] Error parsing mcp_response SSE data:`, error, "Raw data:", event.data);
-                    if (onError) onError(new Error(`Error parsing SSE data: ${error.message}`));
+                    logger.error(`[${clientCorrelationId}] Error polling for updates:`, error);
+                    if (onError) onError(error);
+                    cleanupAndComplete();
                 }
-            });
-            
-            eventSource.addEventListener('mcp_stream_end', (event) => {
-                logger.info(`[${clientCorrelationId}] MCP Stream End event received:`, event.data ? JSON.parse(event.data) : 'No data');
-                cleanupAndComplete();
-            });
-
-            eventSource.addEventListener('mcp_error', (event) => {
-                let errorData;
-                try {
-                    errorData = JSON.parse(event.data);
-                } catch (e) {
-                    errorData = { error: { message: "Failed to parse mcp_error event data: " + event.data } };
-                }
-                logger.error(`[${clientCorrelationId}] MCP Error event received:`, errorData);
-                if (onError) onError(new Error(errorData.error?.message || 'Unknown SSE error from server'));
-                cleanupAndComplete();
-            });
-            
-            eventSource.onerror = (error) => {
-                // This handles network errors or if the SSE connection itself fails
-                logger.error(`[${clientCorrelationId}] Generic EventSource error:`, error);
-                // Check if it's a real error or just a close event
-                if (eventSource.readyState === EventSource.CLOSED) {
-                    logger.info(`[${clientCorrelationId}] EventSource closed.`);
-                } else if (onError) {
-                    onError(new Error('SSE connection error or closed unexpectedly.'));
-                }
-                cleanupAndComplete();
             };
+            
+            // Start polling immediately and then at regular intervals
+            await pollForUpdates();
+            pollInterval = setInterval(pollForUpdates, 1000); // Poll every second
+
+            // Add a new endpoint to handle polling on the server side
+            // This will be implemented in the server code
 
         } catch (error) { // Catch errors from EventSource constructor itself (e.g., invalid URL)
             logger.error(`[${clientCorrelationId}] Error setting up EventSource for stream: ${error.message}`, error);
@@ -177,13 +217,15 @@ class McpClient {
      */
     async sendSseInitiationRequest(serviceId, operationId, payload, clientCorrelationId) {
         try {
+            logger.info(`[${clientCorrelationId}] Sending initiation request with operation_id: ${operationId}`);
+            
+            // Log the payload for debugging
+            logger.info(`[${clientCorrelationId}] Request payload:`, JSON.stringify(payload));
+            
             const response = await this.httpClient.post(`/api/${serviceId}/mcp`, {
                 operation_id: operationId,
-                payload: payload, // The actual data for the operation
-                stream_options: { // Instruct server to use SSE for this request
-                    correlation_id: clientCorrelationId,
-                    stream_to_sse: true
-                }
+                payload: payload // The actual data for the operation
+                // Remove stream_options as it's not in the test_connection_native.js example
             });
             // Expecting a 2xx response with a message like "Streaming initiated..."
             if (response.status >= 200 && response.status < 300 && response.data.success) {

@@ -108,7 +108,7 @@ The AI Model Playground Client provides a user-friendly interface to demonstrate
    - Edit `.env` to include your actual OpenAI API key and adjust settings as needed:
    ```
    PORT=3000
-   API_GATEWAY_URL=http://localhost:8080  # Point to your MCP Access Point
+   API_GATEWAY_URL=http://127.0.0.1:8080  # Point to your MCP Access Point (use 127.0.0.1 instead of localhost to avoid IPv6 issues)
    OPENAI_API_KEY=your_actual_api_key_here
    ```
 
@@ -159,6 +159,28 @@ The client demonstrates several key concepts:
 - Managing API keys and authentication securely
 - Converting between data formats for different AI services
 
+#### Client-Server Communication
+
+The client communicates with the MCP Access Point using HTTP requests. Here's how it works:
+
+1. **Request Mapping**:
+   - The client sends requests to endpoints like `/api/text` or `/api/image`
+   - These requests are mapped to MCP operations (e.g., `generateText` for text generation)
+   - The client uses the `McpClient` class to handle this mapping
+   - **Important**: The `operation_id` in client requests must match what's defined in `config.yaml`
+
+2. **Streaming Support**:
+   - For real-time responses, the client establishes a Server-Sent Events (SSE) connection
+   - The client first opens an SSE connection with a unique correlation ID
+   - Then it sends a POST request to initiate streaming, referencing the correlation ID
+   - The server streams responses back through the open SSE connection
+   - The client listens for specific event types: `mcp_connected`, `mcp_response`, `mcp_stream_end`, and `mcp_error`
+
+3. **Network Configuration**:
+   - The client connects to the server using IPv4 (127.0.0.1) to avoid IPv6 resolution issues
+   - Using `localhost` may cause `ECONNREFUSED` errors due to IPv6 resolution problems
+   - This is especially important in Node.js applications where IPv6 is preferred by default
+
 This example client can serve as a foundation for building more complex applications that leverage the MCP Access Point for AI service integration.
 
 ## Configuration
@@ -177,7 +199,7 @@ Create a `.env` file in the `clients/ai-playground-client` directory with the fo
 
 ```
 PORT=3000
-API_GATEWAY_URL=http://localhost:8080
+API_GATEWAY_URL=http://127.0.0.1:8080
 OPENAI_API_KEY=your_openai_api_key
 ```
 
@@ -213,6 +235,67 @@ For end-to-end testing, you can use the provided test script:
 ```bash
 ./test/test-e2e.sh
 ```
+
+## Troubleshooting
+
+### Client-Server Connection Issues
+
+#### Common Connection Issues
+
+##### ECONNREFUSED Errors
+
+If you encounter `ECONNREFUSED` errors when the client tries to connect to the server, consider these solutions:
+
+1. **Use IPv4 Instead of localhost**:
+   - In your client configuration, use `127.0.0.1` instead of `localhost` to avoid IPv6 resolution issues
+   - Update your `.env` file to use `API_GATEWAY_URL=http://127.0.0.1:8080`
+   - This is a common issue in Node.js applications where IPv6 (::1) is attempted first, causing connection failures
+
+2. **Verify Operation IDs**:
+   - Ensure the `operation_id` in client requests matches what's defined in the server configuration
+   - Check `config.yaml` for the correct operation_id mappings (e.g., use `generateText` instead of `v1/chat/completions`)
+   - Example in config.yaml:
+     ```yaml
+     routes:
+       - id: "generate_text_route"
+         operation_id: "generateText"  # This is what your client should use
+         uri: "/v1/chat/completions"   # This is the upstream URI
+     ```
+
+3. **Check Server Status**:
+   - Verify the server is running: `curl http://127.0.0.1:8080/health`
+   - Check for any error messages in the server logs: `tail -f logs/mcp-access-point-*.log`
+
+4. **Test Direct Connection**:
+   - Test direct connection to the server using curl:
+   ```bash
+   curl -X POST http://127.0.0.1:8080/api/text_generation_service/mcp \
+     -H "Content-Type: application/json" \
+     -d '{"operation_id": "generateText", "payload": {"messages": [{"role": "user", "content": "Hello"}], "model": "gpt-3.5-turbo"}}'
+   ```
+
+##### SSE Streaming Issues
+
+If you encounter errors with SSE streaming such as "Error parsing SSE data":
+
+1. **Check Event Format**:
+   - Ensure the server is sending properly formatted SSE events
+   - Each event should follow the format: `event: EVENT_TYPE\ndata: JSON_DATA\n\n`
+
+2. **Verify Event Listeners**:
+   - Make sure your client has listeners for all event types: `mcp_connected`, `mcp_response`, `mcp_error`, and `mcp_stream_end`
+   - Add error handling for malformed event data
+
+3. **Debug SSE Connection**:
+   - Test SSE connection directly using curl:
+   ```bash
+   curl -N http://127.0.0.1:8080/api/text_generation_service/sse?correlationId=test-123
+   ```
+   - Check server logs for SSE-related errors
+
+4. **Network Inspection**:
+   - Use browser developer tools to inspect the SSE connection
+   - Look for any connection issues or malformed responses
 
 ## License
 
